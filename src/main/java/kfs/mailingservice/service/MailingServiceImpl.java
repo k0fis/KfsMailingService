@@ -466,6 +466,7 @@ public class MailingServiceImpl implements MailingService {
         mt = mailTemplateInit();
         mt.setName(name);
         mt.setMailSubject(name);
+        mailAddressDao.insert(mt.getFromTemplate());
         mailTemplateDao.insert(mt);
         return mt;
     }
