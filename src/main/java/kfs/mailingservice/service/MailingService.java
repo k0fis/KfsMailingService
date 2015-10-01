@@ -27,6 +27,7 @@ public interface MailingService {
     List<MailAttach>mailAttachLoad(MailTemplate template);
 
     void mailForSentSave(MailForSent mailForSend);
+    List<MailForSent> mailForSentLoad(KfsContact contact);
     List<MailForSent> mailForSentLoad(int limit);
     List<MailForSent> mailForSentLoad(MailStatus status, int limit);
     
@@ -49,7 +50,8 @@ public interface MailingService {
     List<MailIncomingPart> partLoad(MailIncoming mailIncoming);
     
     List<MailIncoming> incomingLoad(KfsContact contact);
-    void procesIncoming();
+    void procesIncoming(String statusName);
+    void procesIncomingDelete(String statusName);
 
     void mailFooterSave(MailFooter ma, List<MailFooterAttach> attach);
     void mailFooterDelete(MailFooter mf);

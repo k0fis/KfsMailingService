@@ -8,6 +8,7 @@ import kfs.springutils.BaseDao;
  *
  * @author pavedrim
  */
-public interface MailAddressDao extends BaseDao<MailAddress, String> {
+public interface MailAddressDao extends BaseDao<MailAddress, Long> {
 
+    MailAddress findByAddress(String address);
 }

@@ -2,6 +2,7 @@ package kfs.mailingservice.dao.jpa;
 
 import java.util.List;
 import javax.persistence.EntityTransaction;
+import kfs.kfscrm.domain.KfsContact;
 import kfs.mailingservice.dao.MailForSendDao;
 import kfs.mailingservice.domain.MailForSent;
 import kfs.springutils.BaseDaoJpa;
@@ -37,6 +38,13 @@ public class JpaMailForSendDao extends BaseDaoJpa<MailForSent, Long> implements 
             em.merge(mailForSent);
         }
         et.commit();
+    }
+
+    @Override
+    public List<MailForSent> load(KfsContact contact) {
+        return em.createQuery("SELECT a FROM MailForSent a WHERE a.contact = :contact ORDER BY a.created DESC")
+                .setParameter("contact", contact)
+                .getResultList();
     }
 
     @Override

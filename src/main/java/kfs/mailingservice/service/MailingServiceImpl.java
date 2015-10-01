@@ -88,7 +88,66 @@ public class MailingServiceImpl implements MailingService {
     private static final String ctMessage = "message/rfc822";
 
     @Override
-    public void procesIncoming() {
+    public void procesIncomingDelete(String statusName) {
+        Session session = Session.getInstance(mailsProperties, mailAuthenticator);
+        Store store;
+        try {
+            store = session.getStore();
+        } catch (NoSuchProviderException ex) {
+            throw new MailingServiceException("Cannot init store", ex);
+        }
+        try {
+            store.connect();
+        } catch (MessagingException ex) {
+            throw new MailingServiceException("Cannot open mail", ex);
+        }
+
+        Folder folder;
+        try {
+            folder = store.getFolder(mailInboxFolder);
+        } catch (MessagingException ex) {
+            throw new MailingServiceException("Cannot open " + mailInboxFolder, ex);
+        }
+
+        if (!folder.isOpen()) {
+            try {
+                folder.open(Folder.READ_WRITE);
+            } catch (MessagingException ex) {
+                throw new MailingServiceException("Cannot open " + mailInboxFolder, ex);
+            }
+        }
+        Message msgs[];
+        try {
+            msgs = folder.getMessages();
+        } catch (MessagingException ex) {
+            throw new MailingServiceException("Cannot get mails", ex);
+        }
+        if ((msgs != null) && (msgs.length > 0)) {
+            for (Message m : msgs) {
+                processIncoming(m, statusName);
+                try {
+                    m.setFlag(Flags.Flag.DELETED, true);
+                } catch (MessagingException ex) {
+                    throw new MailingServiceException("delete msg", ex);
+                }
+            }
+        }
+        try {
+            if (folder.isOpen()) {
+                folder.close(true);
+            }
+        } catch (MessagingException ex) {
+            throw new MailingServiceException("Cannot close " + mailInboxFolder, ex);
+        }
+        try {
+            store.close();
+        } catch (MessagingException ex) {
+            throw new MailingServiceException("Cannot close store", ex);
+        }
+    }
+
+    @Override
+    public void procesIncoming(String statusName) {
         Session session = Session.getInstance(mailsProperties, mailAuthenticator);
         Store store;
         try {
@@ -110,7 +169,12 @@ public class MailingServiceImpl implements MailingService {
         }
         try {
             if (!folder2.exists()) {
-                folder2.create(Folder.HOLDS_MESSAGES);
+                Logger.getLogger(getClass().getName()).info("Create " + mailMoveFolder);
+                boolean b = folder2.create(Folder.HOLDS_MESSAGES);
+                Logger.getLogger(getClass().getName()).info("Created " + mailMoveFolder + " " + b);
+                folder2 = store.getFolder(mailMoveFolder);
+            } else {
+                Logger.getLogger(getClass().getName()).info("folder " + mailMoveFolder + " exist");
             }
         } catch (MessagingException ex) {
             throw new MailingServiceException("Cannot create " + mailMoveFolder, ex);
@@ -138,7 +202,14 @@ public class MailingServiceImpl implements MailingService {
         }
         if ((msgs != null) && (msgs.length > 0)) {
             for (Message m : msgs) {
-                processIncoming(m);
+                processIncoming(m, statusName);
+                if (!folder2.isOpen()) {
+                    try {
+                        folder2.open(Folder.READ_WRITE);
+                    } catch (MessagingException ex) {
+                        throw new MailingServiceException("Cannot open " + mailMoveFolder, ex);
+                    }
+                }
                 try {
                     folder2.appendMessages(new Message[]{m});
                 } catch (MessagingException ex) {
@@ -147,12 +218,17 @@ public class MailingServiceImpl implements MailingService {
             }
         }
         try {
-            folder2.close(true);
+            if (folder2.isOpen()) {
+                folder2.close(true);
+            }
         } catch (MessagingException ex) {
+            Logger.getLogger("Cannot close " + mailMoveFolder + " " + ex.getMessage());
             throw new MailingServiceException("Cannot close " + mailMoveFolder, ex);
         }
         try {
-            folder.close(true);
+            if (folder.isOpen()) {
+                folder.close(true);
+            }
         } catch (MessagingException ex) {
             throw new MailingServiceException("Cannot close " + mailInboxFolder, ex);
         }
@@ -163,7 +239,7 @@ public class MailingServiceImpl implements MailingService {
         }
     }
 
-    public void processIncoming(Message message) {
+    public void processIncoming(Message message, String statusName) {
         Logger log = Logger.getLogger(getClass().getName());
         MailIncoming mi = new MailIncoming();
         try {
@@ -193,7 +269,17 @@ public class MailingServiceImpl implements MailingService {
         }
         for (Address adrs : addrss) {
             InternetAddress ia = (InternetAddress) adrs;
-            MailAddress ret = mailAddressDao.findById(ia.getAddress());
+            if (mi.getContact() == null) {
+                KfsContact contact = crmService.contactFindByMail(ia.getAddress(), mailUserName);
+                if (contact == null) {
+                    contact = crmService.contactCreate(ia.getAddress(), "", mailUserName);
+                    contact.setNote(ia.getPersonal());
+                    contact.setStatus(statusName);
+                    crmService.contactSave(contact, mailUserName);
+                }
+                mi.setContact(contact);
+            }
+            MailAddress ret = mailAddressDao.findByAddress(ia.getAddress());
             if (ret == null) {
                 ret = new MailAddress();
                 ret.setAddress(ia.getAddress());
@@ -317,19 +403,12 @@ public class MailingServiceImpl implements MailingService {
                 }
             }
         }
-        saveMailIncoming(mi);
+        mailIncomingDao.insert(mi);
         try {
             message.setFlag(Flags.Flag.DELETED, true);
         } catch (MessagingException ex) {
             log.log(Level.SEVERE, "Cannot delete message", ex);
         }
-    }
-
-    private void saveMailIncoming(MailIncoming mi) {
-        String ma = mi.getSender().getAddress();
-        KfsContact contact = crmService.contactFindByMail(ma, mailUserName);
-        mi.setContact(contact);
-        mailIncomingDao.insert(mi);
     }
 
     @Override
@@ -342,7 +421,7 @@ public class MailingServiceImpl implements MailingService {
         if (!isValidEmailAddress(mail)) {
             return null;
         }
-        MailAddress ret = mailAddressDao.findById(mail);
+        MailAddress ret = mailAddressDao.findByAddress(mail);
         if (ret == null) {
             ret = new MailAddress();
             ret.setAddress(mail);
@@ -354,7 +433,7 @@ public class MailingServiceImpl implements MailingService {
 
     @Override
     public void mailAddressSave(MailAddress mail) {
-        MailAddress ret = mailAddressDao.findById(mail.getAddress());
+        MailAddress ret = mailAddressDao.findByAddress(mail.getAddress());
         if (ret == null) {
             mailAddressDao.insert(mail);
         } else if (!ret.getName().equals(mail.getName())) {
@@ -408,6 +487,11 @@ public class MailingServiceImpl implements MailingService {
         }
     }
 
+    @Override
+    public List<MailForSent> mailForSentLoad(KfsContact contact){
+        return mailForSendDao.load(contact);
+    }
+    
     @Override
     public List<MailForSent> mailForSentLoad(int limit) {
         return mailForSendDao.load(limit);
@@ -470,7 +554,7 @@ public class MailingServiceImpl implements MailingService {
         mailTemplateDao.insert(mt);
         return mt;
     }
-    
+
     @Override
     public MailTemplate mailTemplateReload(MailTemplate mt) {
         return mailTemplateDao.findFull(mt);

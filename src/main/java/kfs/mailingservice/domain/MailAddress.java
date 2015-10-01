@@ -6,12 +6,14 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.SequenceGenerator;
+import javax.persistence.Table;
 import javax.validation.constraints.Pattern;
 import javax.validation.constraints.Size;
 import kfs.kfsvaalib.kfsForm.KfsField;
 import kfs.kfsvaalib.kfsForm.KfsMField;
 import kfs.kfsvaalib.kfsTable.KfsTablePos;
 import kfs.kfsvaalib.kfsTable.Pos;
+import org.hibernate.annotations.Index;
 
 /**
  *
@@ -33,6 +35,7 @@ public class MailAddress {
     @Pattern(regexp = "(^$|^[\\w\\-]+(\\.[\\w\\-]+)*@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,6}$)")
     @Size(max = 512)
     @Column(nullable = false, length = 512)
+    @Index(name="MailAddressAddressIndex")
     private String address;
 
     @KfsMField({
@@ -57,6 +60,14 @@ public class MailAddress {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
 }
